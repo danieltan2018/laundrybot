@@ -4,9 +4,9 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (Updater, CommandHandler,
                           MessageHandler, Filters, CallbackQueryHandler)
 from telegram.ext.dispatcher import run_async
+# Dependency: pip install flask requests
 from flask import Flask, request
 import logging
-import random
 from datetime import datetime
 from secrets import bottoken
 import json
@@ -35,7 +35,7 @@ def loader():
         with open('queue.json') as queuefile:
             queue = json.load(queuefile)
     except:
-        with open('groups.json', 'w+'):
+        with open('queue.json', 'w+'):
             queue = {}
     # Initialise all machines with state 2 (unknown if ON or OFF)
     # Set last updated to current time
@@ -49,23 +49,22 @@ def loader():
 # Not recommended for production
 @run_async
 def webserver():
-    app.run(host='0.0.0.0', port=80, threaded=True,
-            debug=True)
+    app.run(host='0.0.0.0', port=80, threaded=True)
 
 # Handler for POSTs
 # TODO: Change to a secret route to prevent people from tampering
 @app.route('/', methods=['POST'])
 def postupdate():
-    # Incoming format is JSON e.g. {'id': 'c1', 'state': '0'}
+    # Incoming format is JSON e.g. {"id": "c1", "state": 0}
     try:
         req_data = request.get_json()
         id = req_data['id']
-        state = int(req_data['state'])  # numbers in JSON sent as string
+        state = int(req_data['state'])
         machines[id] = {'state': state, 'updated': datetime.now()}
         machineupdate(id)
-        return 200  # HTTP success code
+        return ('Success', 200)  # HTTP success code
     except:
-        return 400  # HTTP error code
+        return ('Error', 400)  # HTTP error code
 
 
 def machineupdate(id):
@@ -73,7 +72,7 @@ def machineupdate(id):
 
 # Send all messages via asynchronous function so main program does not wait for it
 @run_async
-def sendnew(context, id, keyboard, msg):
+def send(context, id, keyboard, msg):
     # Convert list of InlineKeyboardButton to final format
     keyboard = InlineKeyboardMarkup(keyboard)
     context.bot.send_message(
@@ -86,8 +85,9 @@ def start(update, context):
     last_name = update.message.from_user.last_name
     full_name = (str(first_name or '') + ' ' +
                  str(last_name or '')).strip()
-    context.bot.send_message(
-        chat_id=user_id, text='Hi {}, welcome to the *Laundry Bot*!\n\nWhat would you like to do?'.format(full_name), parse_mode=telegram.ParseMode.MARKDOWN)
+    msg = 'Hi {}, welcome to the *Laundry Bot*!\n\nWhat would you like to do?'.format(
+        full_name)
+
 
 '''
 def groupinit(context):
@@ -110,12 +110,13 @@ def groupedit(context):
         )
 '''
 
+
 def main():
     updater = Updater(token=bottoken, use_context=True)
     dp = updater.dispatcher
 
     dp.add_handler(CommandHandler("start", start))
-    #dp.add_handler(MessageHandler(Filters.text, prayer))
+    # dp.add_handler(MessageHandler(Filters.text, prayer))
 
     loader()
     webserver()
