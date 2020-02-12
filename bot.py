@@ -104,7 +104,7 @@ def loader():
 # Not recommended for production
 @run_async
 def webserver():
-    app.run(host='0.0.0.0', port=8080, threaded=True)
+    app.run(host='0.0.0.0', port=5000, threaded=True)
 
 # Handler for POSTs
 # TODO: Change to a secret route to prevent people from tampering
