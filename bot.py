@@ -104,11 +104,11 @@ def loader():
 # Not recommended for production
 @run_async
 def webserver():
-    app.run(host='0.0.0.0', port=80, threaded=True)
+    app.run(host='0.0.0.0', port=8080, threaded=True)
 
 # Handler for POSTs
 # TODO: Change to a secret route to prevent people from tampering
-@app.route('/', methods=['POST'])
+@app.route('/hehe', methods=['POST'])
 def postupdate():
     # Assume incoming format is JSON e.g. {"washer": "Cendana Washer 1", "state": 0}
     try:
