@@ -18,56 +18,88 @@ logging.basicConfig(filename='debug.log', filemode='a+', format='%(asctime)s - %
                     level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
+
+
 # Define Flask webserver
 app = Flask(__name__)
+
+#global variables initialized
+users = ""
+watch = ""
+queue = ""
+colleges = ""
+machines = {}
+
 
 # Allows us to send messages without using context
 bot = telegram.Bot(token=bottoken)
 
+#json directories - edit before deploying
+queuefilepath = "/Users/IndieDa/Documents/GitHub/laundrybot/queue.json"
+watchfilepath = "/Users/IndieDa/Documents/GitHub/laundrybot/watch.json"
+usersfilepath = "/Users/IndieDa/Documents/GitHub/laundrybot/users.json"
+
+# function to add to JSON 
+def write_json(id_data, filename=usersfilepath): 
+    global usersfilepath
+    with open(usersfilepath) as json_file: 
+        json_full = json.load(json_file) 
+        temp = json_full['people'] 
+        # python object to be appended 
+        y = {'id':data}
+        # appending data  
+        temp.append(y)
+
+    with open(filename,'w') as f: 
+        json.dump(json_full, f, indent=4) 
 
 def loader():
     # Creates or loads json files in case of bot reboot
-    # Stores all users' selected laundry room
+    # Stores all users' selected laundry college
     global users
     try:
-        with open('users.json') as usersfile:
+        with open(usersfilepath) as usersfile:
             users = json.load(usersfile)
     except:
-        with open('users.json', 'w+'):
+        with open(usersfilepath, 'w+'):
             users = {}
     # Stores current watchers for each machine
     global watch
     try:
-        with open('watch.json') as watchfile:
+        with open(watchfilepath) as watchfile:
             watch = json.load(watchfile)
     except:
-        with open('watch.json', 'w+'):
+        with open(watchfilepath, 'w+'):
             watch = {}
     # Stores current queue as list of user IDs
     global queue
     try:
-        with open('queue.json') as queuefile:
+        with open(queuefilepath) as queuefile:
             queue = json.load(queuefile)
     except:
-        with open('queue.json', 'w+'):
+        with open(queuefilepath, 'w+'):
             queue = {}
     # Load the machine database into memory
     from parameters import machine_database
-    global rooms
-    rooms = set()
+    global colleges
+    colleges = set()
     global machines
     machines = {}
-    for room in machine_database:
-        # Get all laundry rooms
-        rooms.add(room)
-        # Initialise queues for each room
-        queue[room] = []
-        for washer in room:
+    for college in machine_database:
+        # Get all laundry colleges
+        colleges.add(college)
+        # Initialise queues for each college, like a dictionary.
+        queue[college] = []
+        print(queue)
+        machines.update({college:{}})
+        for washer in machine_database[college]:
             # Initialise all machines with state -1 (unknown if ON or OFF)
             # Set last updated to current time
-            machines[washer] = {'room': room,
-                                'state': -1, 'updated': datetime.now()}
-
+            print(washer)
+            print(machines)
+            machines[college].update({washer : {'state': 1, 'updated': datetime.now() }})
+    print(machines)
+#Data of machines look like: {'Cendana': {'Cendana Washer 2': {'state': 1, 'updated': datetime.datetime(2020, 2, 13, 1, 27, 48, 289822)}, 'Cendana Washer 4': {'state': 1, 'updated': datetime.datetime(2020, 2, 13, 1, 27, 48, 289840)}, 'Cendana Washer 6': {'state': 1, 'updated': datetime.datetime(2020, 2, 13, 1, 27, 48, 289862)}, 'Cendana Washer 1': {'state': 1, 'updated': datetime.datetime(2020, 2, 13, 1, 27, 48, 289885)}, 'Cendana Washer 3': {'state': 1, 'updated': datetime.datetime(2020, 2, 13, 1, 27, 48, 289958)}}}
 # Run webserver to receive POSTs
 # Not recommended for production
 @run_async
@@ -81,15 +113,16 @@ def postupdate():
     # Assume incoming format is JSON e.g. {"washer": "Cendana Washer 1", "state": 0}
     try:
         req_data = request.get_json()
-        washer = req_data['washer']
-        state = int(req_data['state'])
-        machineupdate(washer, state)  # Run necessary logic
+        washer = req_data['machineLabel']
+        state = int(req_data['value'])
+        college = req_data['college']
+        machineupdate(washer, state, college) # Run necessary logic
         return ('Success', 200)  # HTTP success code
     except:
         return ('Error', 400)  # HTTP error code
 
 
-def machineupdate(washer, state):
+def machineupdate(washer, state, college):
     global machines
     # Runs every time a machine changes state
     # Get duration (experimental feature)
@@ -107,18 +140,18 @@ def machineupdate(washer, state):
         for id in watch[washer]:
             msg = '*{}* has completed! _{}_'.format(washer, duration)
             send(id, msg, [])
-        # Get room and dispatch next in queue
-        room = machines[washer]['room']
+        # Get college and dispatch next in queue
+        college = machines[washer]['college']
         global queue
         # Remove and return first in line
-        id = queue[room].pop(0)
+        id = queue[college].pop(0)
         msg = "It's your turn! *{}* is now available.".format(washer)
         send(id, msg, [])
-        with open('queue.json') as queuefile:
+        with open(queuefilepath) as queuefile:
             json.dump(queue, queuefile)  # backup queue dictionary to file
         # Add user to watch list
         watch.setdefault(washer, []).append(id)  # create list if none exists
-        with open('watch.json') as watchfile:
+        with open(watchfilepath) as watchfile:
             json.dump(watch, watchfile)  # backup watch dictionary to file
         msg = 'You will be notified automatically when your wash is done.'
         send(id, msg, [])
@@ -141,12 +174,12 @@ def start(update, context):
     last_name = update.message.from_user.last_name
     full_name = (str(first_name or '') + ' ' +
                  str(last_name or '')).strip()
-    msg = 'Hi *{}*, welcome to the YNC Laundry Bot!\n\nPlease select a laundry room.'.format(
+    msg = 'Hi *{}*, welcome to the YNC Laundry Bot!\n\nPlease select a laundry college.'.format(
         full_name)
     keyboard = []
-    for room in rooms:
+    for college in colleges:
         keyboard.append([InlineKeyboardButton(
-            room, callback_data='ROOM={}'.format(room))])
+            college, callback_data='ROOM={}'.format(college))])
     send(id, msg, keyboard)
     msg = "_You can type a message at any time to send feedback to the admins, or type /start to return to this page._"
     send(id, msg, [])  # Call function with empty list if no buttons
@@ -172,13 +205,14 @@ def callbackquery(update, context):
     query = update.callback_query
     data = query.data
     id = str(query.message.chat_id)
-    # Activated from selecting a room
+    # Activated from selecting a college
+    print(data)
     if data.startswith('ROOM='):
         data = data.replace('ROOM=', '')
-        # Save user's room selection to file
+        # Save user's college selection to file
         global users
-        users[id] = data
-        with open('users.json') as usersfile:
+        users = {id:data}
+        with open(usersfilepath, "a") as usersfile:
             json.dump(users, usersfile)
         msg = 'You have selected *{}*.\n\nWhat would you like to do?'.format(
             data)
@@ -191,7 +225,7 @@ def callbackquery(update, context):
                 "Join Queue", callback_data='queue')]
         ]
         keyboard = InlineKeyboardMarkup(keyboard)
-        # Overwrite the room selection message
+        # Overwrite the college selection message
         bot.edit_message_text(
             chat_id=id,
             message_id=query.message.message_id,
@@ -201,31 +235,42 @@ def callbackquery(update, context):
         )
     elif data == 'available':
         # From "Check Available Washers" button
-        room = users[id]
-        available = getavailable(room)
+        college = users[id]
+        available = getavailable(college)
         count = len(available)
         msg = '*There are {} available washers:*\n'.format(count)
         for item in available:
             msg += item + '\n'
+        print(msg)
         send(id, msg, [])
     elif data == 'notify':
         # From "Notify when Done" button
-        room = users[id]
+        college = users[id]
         active = []
-        for washer in room:
-            if machines[washer]['state'] == 1:
+        for washer in machines[college]:
+            if machines[college][washer]['state'] == 1:
                 active.append(washer)
         active.sort()
+        print(active)
         msg = 'Please select a washer:'
         keyboard = []
         for item in active:
-            keyboard.append([InlineKeyboardButton(
-                active, callback_data='WASHER={}'.format(active))])
+            keyboard.append([InlineKeyboardButton(item, callback_data='WASHER='.format(item))])
+        keyboard = InlineKeyboardMarkup(keyboard)
+            # Overwrite the college selection message
+        bot.edit_message_text(
+            chat_id=id,
+            message_id=query.message.message_id,
+            text=msg,
+            reply_markup=keyboard,
+            parse_mode=telegram.ParseMode.MARKDOWN
+        )
     elif data.startswith('WASHER='):
         data = data.replace('WASHER=', '')
         global watch
+        print("yay")
         watch.setdefault(data, []).append(id)
-        with open('watch.json') as watchfile:
+        with open(watchfilepath) as watchfile:
             json.dump(watch, watchfile)
         # Pop-up notification instead of sending message
         context.bot.answer_callback_query(
@@ -233,18 +278,18 @@ def callbackquery(update, context):
         return
     elif data == 'queue':
         global queue
-        room = users[id]
-        available = getavailable(room)
+        college = users[id]
+        available = getavailable(college)
         if len(available) > 0:
             context.bot.answer_callback_query(
                 query.id, text='No need to queue, there are available washers.'.format(data), show_alert=True)
-        elif id in queue[room]:
+        elif id in queue[college]:
             context.bot.answer_callback_query(
                 query.id, text='You are already in the queue.', show_alert=True)
         else:
-            count = len(queue[room])
-            queue[room].append(id)
-            with open('queue.json') as queuefile:
+            count = len(queue[college])
+            queue[college].append(id)
+            with open(queuefilepath) as queuefile:
                 json.dump(queue, queuefile)
             context.bot.answer_callback_query(
                 query.id, text='Added to queue. There are {} people ahead of you.'.format(count), show_alert=True)
@@ -253,13 +298,18 @@ def callbackquery(update, context):
     return
 
 
-def getavailable(room):
-    # Return list of available washers for a room
+def getavailable(college):
+    # Return list of available washers for a college
+    global machines
+    print(machines)
     available = []
-    for washer in room:
-        if machines[washer]['state'] == 0:
+    for washer in machines[college]:
+        print("triggered")
+        print(washer)
+        if machines[college][washer]['state'] == 0:
             available.append(washer)
     available.sort()
+    print(available)
     return available
 
 
