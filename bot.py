@@ -10,7 +10,7 @@ from flask import Flask, request
 import logging
 from datetime import datetime
 # Ensure secrets.py exists - refer to secrets_dummy.py format
-from secrets import bottoken
+from secrets import bottoken, admins
 import json
 
 # Beware of this log level - file size grows quickly with bot polling
@@ -152,19 +152,19 @@ def start(update, context):
     msg = "_You can type a message at any time to send feedback to the admins, or type /start to return to this page._"
     send(id, msg, [])  # Call function with empty list if no buttons
 
-
-### FOR REFERENCE ONLY ###
-'''
-def groupedit(context):
-    for key, value in groups.items():
-        context.bot.edit_message_text(
-            chat_id=int(key),
-            message_id=int(value),
-            text=compose,
-            parse_mode=telegram.ParseMode.HTML
-        )
-'''
-### FOR REFERENCE ONLY ###
+# Forwards incoming text messages to admins
+@run_async
+def feedback(update, context):
+    first_name = update.message.from_user.first_name
+    last_name = update.message.from_user.last_name
+    full_name = (str(first_name or '') + ' ' +
+                 str(last_name or '')).strip()
+    message = update.message.text
+    msg = '*Feedback from {}:*\n\n'.format(full_name) + message
+    for id in admins:
+        send(id, msg, [])
+    update.message.reply_text(
+        "_Your feedback has been sent to the admins._", parse_mode=telegram.ParseMode.MARKDOWN)
 
 
 def main():
@@ -172,12 +172,12 @@ def main():
     dp = updater.dispatcher
 
     dp.add_handler(CommandHandler("start", start))
-    # dp.add_handler(MessageHandler(Filters.text, prayer))
+    dp.add_handler(MessageHandler(Filters.text, feedback))
 
     loader()
     webserver()
 
-    updater.start_polling(1)  # Check updates every second
+    updater.start_polling(1)  # Check for updates every 1 second
 
     print("Bot is running. Press Ctrl+C to stop.")
     updater.idle()
