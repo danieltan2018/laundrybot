@@ -50,7 +50,7 @@ def loader():
             queue = json.load(queuefile)
     except:
         with open('queue.json', 'w+'):
-            queue = []
+            queue = {}
     # Load the machine database into memory
     from parameters import machine_database
     global rooms
@@ -60,10 +60,13 @@ def loader():
     for room in machine_database:
         # Get all laundry rooms
         rooms.add(room)
+        # Initialise queues for each room
+        queue[room] = []
         for washer in room:
             # Initialise all machines with state -1 (unknown if ON or OFF)
             # Set last updated to current time
-            machines[washer] = {'state': -1, 'updated': datetime.now()}
+            machines[washer] = {'room': room,
+                                'state': -1, 'updated': datetime.now()}
 
 # Run webserver to receive POSTs
 # Not recommended for production
@@ -80,11 +83,7 @@ def postupdate():
         req_data = request.get_json()
         washer = req_data['washer']
         state = int(req_data['state'])
-        # Update master list of machine states
-        global machines
-        machines[washer] = {'state': state, 'updated': datetime.now()}
-        # Run necessary logic for users
-        machineupdate(washer, state)
+        machineupdate(washer, state)  # Run necessary logic
         return ('Success', 200)  # HTTP success code
     except:
         return ('Error', 400)  # HTTP error code
@@ -100,19 +99,23 @@ def machineupdate(washer, state):
     duration = (timer.strftime(
         "Your wash took %H hours, %M minutes and %S seconds."))
     # Update master list of machine states
-    machines[washer] = {'state': state, 'updated': now}
+    machines[washer]['state'] = state
+    machines[washer]['updated'] = now
     # Notify user when done
     global watch
     if state == 0:
         for id in watch[washer]:
             msg = '*{}* has completed! _{}_'.format(washer, duration)
             send(id, msg, [])
-    # Dispatch next in queue
+        # Get room and dispatch next in queue
+        room = machines[washer]['room']
         global queue
         # Remove and return first in line
-        id = queue.pop(0)
+        id = queue[room].pop(0)
         msg = "It's your turn! *{}* is now available.".format(washer)
         send(id, msg, [])
+        with open('queue.json') as queuefile:
+            json.dump(queue, queuefile)  # backup queue dictionary to file
         # Add user to watch list
         watch.setdefault(washer, []).append(id)  # create list if none exists
         with open('watch.json') as watchfile:
@@ -138,15 +141,14 @@ def start(update, context):
     last_name = update.message.from_user.last_name
     full_name = (str(first_name or '') + ' ' +
                  str(last_name or '')).strip()
-    msg = 'Hi *{}*, welcome to the Laundry Bot!\n\nWhat would you like to do?'.format(
+    msg = 'Hi *{}*, welcome to the Laundry Bot!\n\nPlease select a laundry room.'.format(
         full_name)
+    keyboard = []
+    for room in rooms:
+        keyboard.append([InlineKeyboardButton(
+            "{}", callback_data='ROOM={}'.format(room, room))])
     keyboard = [
-        [InlineKeyboardButton(
-            "Check Available Washers", callback_data='available')],
-        [InlineKeyboardButton(
-            "Notify when Done", callback_data='notify')],
-        [InlineKeyboardButton(
-            "Join Queue", callback_data='reserve')]
+        ]
     ]
     send(id, msg, keyboard)
     msg = "_You can type a message at any time to send feedback to the admins, or type /start to return to this page._"
@@ -155,16 +157,50 @@ def start(update, context):
 # Forwards incoming text messages to admins
 @run_async
 def feedback(update, context):
+    id = str(update.message.chat_id)
     first_name = update.message.from_user.first_name
     last_name = update.message.from_user.last_name
     full_name = (str(first_name or '') + ' ' +
                  str(last_name or '')).strip()
-    message = update.message.text
-    msg = '*Feedback from {}:*\n\n'.format(full_name) + message
+    tagged_name='[{}](tg://user?id={})'.format(full_name, id)
+    message=update.message.text
+    msg='*Feedback from {}:*\n\n'.format(tagged_name) + message
     for id in admins:
         send(id, msg, [])
     update.message.reply_text(
         "_Your feedback has been sent to the admins._", parse_mode=telegram.ParseMode.MARKDOWN)
+
+
+def callbackquery(update, context):
+    query = update.callback_query
+    data = query.data
+    id = str(query.message.chat_id)
+    # Activated from selecting a room
+    if data.startswith('ROOM='):
+        data = data.replace('ROOM=', '')
+        # Save user's room selection to file
+        global users
+            users[id] = data
+            with open('users.json') as usersfile:
+                json.dump(users, usersfile)
+        # Send bot functions selection
+        msg = 'You have selected *{}*.\n\nWhat would you like to do?'.format(data)
+        keyboard = [
+            [InlineKeyboardButton(
+                "Check Available Washers", callback_data='available')],
+            [InlineKeyboardButton(
+                "Notify when Done", callback_data='notify')],
+            [InlineKeyboardButton(
+                "Join Queue", callback_data='queue')]
+        ]
+        send(id, msg, keyboard)
+    else:
+        # Should not happen
+        context.bot.answer_callback_query(
+            query.id, text='ERROR', show_alert=True)
+        return
+    context.bot.answer_callback_query(query.id)
+    return
 
 
 def main():
@@ -173,6 +209,7 @@ def main():
 
     dp.add_handler(CommandHandler("start", start))
     dp.add_handler(MessageHandler(Filters.text, feedback))
+    dp.add_handler(CallbackQueryHandler(callbackquery))
 
     loader()
     webserver()
