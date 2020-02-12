@@ -35,9 +35,9 @@ machines = {}
 bot = telegram.Bot(token=bottoken)
 
 #json directories - edit before deploying
-queuefilepath = "/Users/IndieDa/Documents/GitHub/laundrybot/queue.json"
-watchfilepath = "/Users/IndieDa/Documents/GitHub/laundrybot/watch.json"
-usersfilepath = "/Users/IndieDa/Documents/GitHub/laundrybot/users.json"
+queuefilepath = "./queue.json"
+watchfilepath = "./watch.json"
+usersfilepath = "./users.json"
 
 # function to add to JSON 
 def write_json(id_data, filename=usersfilepath): 
