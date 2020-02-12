@@ -108,7 +108,7 @@ def webserver():
 
 # Handler for POSTs
 # TODO: Change to a secret route to prevent people from tampering
-@app.route('/hehe', methods=['POST'])
+@app.route('/', methods=['POST'])
 def postupdate():
     # Assume incoming format is JSON e.g. {"washer": "Cendana Washer 1", "state": 0}
     try:
