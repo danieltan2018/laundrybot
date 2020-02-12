@@ -141,15 +141,12 @@ def start(update, context):
     last_name = update.message.from_user.last_name
     full_name = (str(first_name or '') + ' ' +
                  str(last_name or '')).strip()
-    msg = 'Hi *{}*, welcome to the Laundry Bot!\n\nPlease select a laundry room.'.format(
+    msg = 'Hi *{}*, welcome to the YNC Laundry Bot!\n\nPlease select a laundry room.'.format(
         full_name)
     keyboard = []
     for room in rooms:
         keyboard.append([InlineKeyboardButton(
-            "{}", callback_data='ROOM={}'.format(room, room))])
-    keyboard = [
-        ]
-    ]
+            room, callback_data='ROOM={}'.format(room))])
     send(id, msg, keyboard)
     msg = "_You can type a message at any time to send feedback to the admins, or type /start to return to this page._"
     send(id, msg, [])  # Call function with empty list if no buttons
@@ -162,9 +159,9 @@ def feedback(update, context):
     last_name = update.message.from_user.last_name
     full_name = (str(first_name or '') + ' ' +
                  str(last_name or '')).strip()
-    tagged_name='[{}](tg://user?id={})'.format(full_name, id)
-    message=update.message.text
-    msg='*Feedback from {}:*\n\n'.format(tagged_name) + message
+    tagged_name = '[{}](tg://user?id={})'.format(full_name, id)
+    message = update.message.text
+    msg = '*Feedback from {}:*\n\n'.format(tagged_name) + message
     for id in admins:
         send(id, msg, [])
     update.message.reply_text(
@@ -180,11 +177,11 @@ def callbackquery(update, context):
         data = data.replace('ROOM=', '')
         # Save user's room selection to file
         global users
-            users[id] = data
-            with open('users.json') as usersfile:
-                json.dump(users, usersfile)
-        # Send bot functions selection
-        msg = 'You have selected *{}*.\n\nWhat would you like to do?'.format(data)
+        users[id] = data
+        with open('users.json') as usersfile:
+            json.dump(users, usersfile)
+        msg = 'You have selected *{}*.\n\nWhat would you like to do?'.format(
+            data)
         keyboard = [
             [InlineKeyboardButton(
                 "Check Available Washers", callback_data='available')],
@@ -193,14 +190,77 @@ def callbackquery(update, context):
             [InlineKeyboardButton(
                 "Join Queue", callback_data='queue')]
         ]
-        send(id, msg, keyboard)
-    else:
-        # Should not happen
+        keyboard = InlineKeyboardMarkup(keyboard)
+        # Overwrite the room selection message
+        bot.edit_message_text(
+            chat_id=id,
+            message_id=query.message.message_id,
+            text=msg,
+            reply_markup=keyboard,
+            parse_mode=telegram.ParseMode.MARKDOWN
+        )
+    elif data == 'available':
+        # From "Check Available Washers" button
+        room = users[id]
+        available = getavailable(room)
+        count = len(available)
+        msg = '*There are {} available washers:*\n'.format(count)
+        for item in available:
+            msg += item + '\n'
+        send(id, msg, [])
+    elif data == 'notify':
+        # From "Notify when Done" button
+        room = users[id]
+        active = []
+        for washer in room:
+            if machines[washer]['state'] == 1:
+                active.append(washer)
+        active.sort()
+        msg = 'Please select a washer:'
+        keyboard = []
+        for item in active:
+            keyboard.append([InlineKeyboardButton(
+                active, callback_data='WASHER={}'.format(active))])
+    elif data.startswith('WASHER='):
+        data = data.replace('WASHER=', '')
+        global watch
+        watch.setdefault(data, []).append(id)
+        with open('watch.json') as watchfile:
+            json.dump(watch, watchfile)
+        # Pop-up notification instead of sending message
         context.bot.answer_callback_query(
-            query.id, text='ERROR', show_alert=True)
+            query.id, text='You will be notified when {} completes.'.format(data), show_alert=True)
+        return
+    elif data == 'queue':
+        global queue
+        room = users[id]
+        available = getavailable(room)
+        if len(available) > 0:
+            context.bot.answer_callback_query(
+                query.id, text='No need to queue, there are available washers.'.format(data), show_alert=True)
+        elif id in queue[room]:
+            context.bot.answer_callback_query(
+                query.id, text='You are already in the queue.', show_alert=True)
+        else:
+            count = len(queue[room])
+            queue[room].append(id)
+            with open('queue.json') as queuefile:
+                json.dump(queue, queuefile)
+            context.bot.answer_callback_query(
+                query.id, text='Added to queue. There are {} people ahead of you.'.format(count), show_alert=True)
         return
     context.bot.answer_callback_query(query.id)
     return
+
+
+def getavailable(room):
+    # Return list of available washers for a room
+    available = []
+    for washer in room:
+        if machines[washer]['state'] == 0:
+            available.append(washer)
+    available.sort()
+    return available
 
 
 def main():
