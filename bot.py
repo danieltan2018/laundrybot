@@ -268,9 +268,9 @@ def callbackquery(update, context):
     elif data.startswith('WASHER='):
         data = data.replace('WASHER=', '')
         global watch
-        print("yay")
         watch.setdefault(data, []).append(id)
-        with open(watchfilepath) as watchfile:
+        print("yay")
+        with open(watchfilepath, "w+") as watchfile:
             json.dump(watch, watchfile)
         # Pop-up notification instead of sending message
         context.bot.answer_callback_query(
