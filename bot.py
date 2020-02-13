@@ -255,7 +255,7 @@ def callbackquery(update, context):
         msg = 'Please select a washer:'
         keyboard = []
         for item in active:
-            keyboard.append([InlineKeyboardButton(item, callback_data='WASHER='.format(item))])
+            keyboard.append([InlineKeyboardButton(item, callback_data='WASHER={}'.format(item))])
         keyboard = InlineKeyboardMarkup(keyboard)
             # Overwrite the college selection message
         bot.edit_message_text(
