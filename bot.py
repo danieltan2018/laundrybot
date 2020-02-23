@@ -1,3 +1,9 @@
+#To do:
+#1. Create a get function that checks from the website and tracks whether the particular washer has changed.
+#2. Integrate the update_effective.id portion code into telegram bot when error is detected to send out a message to all users that the machine is erroring.
+#3 Consider allowing an option for users to subscribe to error messages for a period of 1 hour.
+#4 Simple channel which receives error messages when it happens. (On Rpi)
+
 # Dependency: pip install python-telegram-bot --upgrade
 import telegram
 import telegram.bot
