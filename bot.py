@@ -24,8 +24,6 @@ logging.basicConfig(filename='debug.log', filemode='a+', format='%(asctime)s - %
                     level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
-
-
 # Define Flask webserver
 app = Flask(__name__)
 
