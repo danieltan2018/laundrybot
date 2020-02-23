@@ -261,7 +261,7 @@ def callbackquery(update, context):
         msg = 'Please select a washer:'
         keyboard = []
         for item in active:
-            keyboard.append([InlineKeyboardButton(item, callback_data='WASHER='.format(item))])
+            keyboard.append([InlineKeyboardButton(item, callback_data='WASHER={}'.format(item))])
         keyboard = InlineKeyboardMarkup(keyboard)
             # Overwrite the college selection message
         bot.edit_message_text(
@@ -274,9 +274,9 @@ def callbackquery(update, context):
     elif data.startswith('WASHER='):
         data = data.replace('WASHER=', '')
         global watch
-        print("yay")
         watch.setdefault(data, []).append(id)
-        with open(watchfilepath) as watchfile:
+        print("yay")
+        with open(watchfilepath, "w+") as watchfile:
             json.dump(watch, watchfile)
         # Pop-up notification instead of sending message
         context.bot.answer_callback_query(
