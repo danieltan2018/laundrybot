@@ -98,37 +98,45 @@ def machineupdate(washer, state):
     then = datetime.fromisoformat(machines[washer]['updated'])
     now = datetime.now()
     timer = now-then
+    timer = str(timer)
+    timer = timer.split('.')[0]
     duration = "Your wash took {}".format(timer)
     # Update master list of machine states
     machines[washer]['state'] = state
     machines[washer]['updated'] = str(now)
     # Notify user when done
     global watch
-    if state != 0:
-        return
-    if washer in watch:
-        for id in watch[washer]:
-            msg = '*{}* has completed! _{}_'.format(washer, duration)
+    if state == 0:
+        if washer in watch:
+            for id in watch[washer]:
+                msg = '*{}* has completed! _{}_'.format(washer, duration)
+                send(id, msg, [])
+            watch[washer] = {}
+            with open('watch.json', 'w') as watchfile:
+                json.dump(watch, watchfile)
+        # Get room and dispatch next in queue
+        room = machines[washer]['room']
+        global queue
+        if len(queue[room]) > 0:
+            # Remove and return first in line
+            id = queue[room].pop(0)
+            msg = "It's your turn! *{}* is now available.".format(washer)
             send(id, msg, [])
-    # Get room and dispatch next in queue
-    room = machines[washer]['room']
-    global queue
-    if len(queue[room]) > 0:
-        # Remove and return first in line
-        id = queue[room].pop(0)
-        msg = "It's your turn! *{}* is now available.".format(washer)
-        send(id, msg, [])
-        with open('queue.json', 'w') as queuefile:
-            json.dump(queue, queuefile)  # backup queue dictionary to file
-        # Add user to watch list
-        if washer not in watch:
-            watch[washer] = set()
-        else:
-            watch[washer].add(id)
-        with open('watch.json', 'w') as watchfile:
-            json.dump(watch, watchfile)  # backup watch dictionary to file
-        msg = 'You will be notified automatically when your wash is done.'
-        send(id, msg, [])
+            with open('queue.json', 'w') as queuefile:
+                json.dump(queue, queuefile)  # backup queue dictionary to file
+            # Add user to watch list
+            if washer not in watch:
+                watch[washer] = {}
+            watch[washer][id] = None
+            with open('watch.json', 'w') as watchfile:
+                json.dump(watch, watchfile)  # backup watch dictionary to file
+    elif state == 1:
+        if washer in watch:
+            for id in watch[washer]:
+                msg = '*{}* has been started!'.format(washer)
+                send(id, msg, [])
+                msg = 'You will be automatically notified when this wash is done.'
+                send(id, msg, [])
     return
 
 # Send all messages via asynchronous function so main program does not wait for it
