@@ -66,7 +66,7 @@ def loader():
             # Initialise all machines with state -1 (unknown if ON or OFF)
             # Set last updated to current time
             machines[washer] = {'room': room,
-                                'state': -1, 'updated': datetime.now()}
+                                'state': -1, 'updated': str(datetime.now())}
 
 # Run webserver to receive POSTs
 # Not recommended for production
@@ -93,7 +93,7 @@ def machineupdate(washer, state):
     global machines
     # Runs every time a machine changes state
     # Get duration (experimental feature)
-    then = machines[washer]['updated']
+    then = datetime.fromisoformat(machines[washer]['updated'])
     now = datetime.now()
     timer = then-now
     duration = (timer.strftime(
@@ -114,11 +114,11 @@ def machineupdate(washer, state):
         id = queue[room].pop(0)
         msg = "It's your turn! *{}* is now available.".format(washer)
         send(id, msg, [])
-        with open('queue.json') as queuefile:
+        with open('queue.json', 'w') as queuefile:
             json.dump(queue, queuefile)  # backup queue dictionary to file
         # Add user to watch list
         watch.setdefault(washer, []).append(id)  # create list if none exists
-        with open('watch.json') as watchfile:
+        with open('watch.json', 'w') as watchfile:
             json.dump(watch, watchfile)  # backup watch dictionary to file
         msg = 'You will be notified automatically when your wash is done.'
         send(id, msg, [])
@@ -178,7 +178,7 @@ def callbackquery(update, context):
         # Save user's room selection to file
         global users
         users[id] = data
-        with open('users.json') as usersfile:
+        with open('users.json', 'w') as usersfile:
             json.dump(users, usersfile)
         msg = 'You have selected *{}*.\n\nWhat would you like to do?'.format(
             data)
@@ -244,7 +244,7 @@ def callbackquery(update, context):
         else:
             count = len(queue[room])
             queue[room].append(id)
-            with open('queue.json') as queuefile:
+            with open('queue.json', 'w') as queuefile:
                 json.dump(queue, queuefile)
             context.bot.answer_callback_query(
                 query.id, text='Added to queue. There are {} people ahead of you.'.format(count), show_alert=True)
